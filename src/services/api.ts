@@ -129,6 +129,35 @@ export async function checkServerConnectivity(timeoutMs = 4000): Promise<boolean
 }
 
 const ACTIVE_EMPRESA_STORAGE_KEY = 'thoth_vendas_empresa_id'
+const ACTIVE_USER_STORAGE_KEY = 'thoth_vendas_user_id'
+
+export function getActiveUserId(): string | undefined {
+  try {
+    return localStorage.getItem(ACTIVE_USER_STORAGE_KEY) || undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function setActiveUserId(userId?: string | null) {
+  try {
+    const prev = localStorage.getItem(ACTIVE_USER_STORAGE_KEY)
+    if (userId) {
+      if (prev && prev !== userId) {
+        // Troca de vendedor/usuário no mesmo dispositivo: isola orçamentos e rascunhos locais
+        localStorage.removeItem(ORCAMENTOS_STORAGE_KEY)
+        localStorage.removeItem('vendedor_carrinho')
+        localStorage.removeItem('vendedor_cliente')
+        void clearOfflineDataCache()
+      }
+      localStorage.setItem(ACTIVE_USER_STORAGE_KEY, userId)
+    } else {
+      localStorage.removeItem(ACTIVE_USER_STORAGE_KEY)
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export function getActiveEmpresaId(): string | undefined {
   try {
@@ -244,6 +273,9 @@ export async function loginVendedor(cpf: string, pin: string): Promise<LoginResp
 
   await clearOfflineDataCache()
 
+  if (data.user?.id) {
+    setActiveUserId(data.user.id)
+  }
   if (data.token && !data.requerSelecaoEmpresa) {
     setToken(data.token)
   }
@@ -275,6 +307,9 @@ export async function selecionarEmpresa(empresaId: string, tempToken?: string): 
 
   await clearOfflineDataCache()
 
+  if (data.user?.id) {
+    setActiveUserId(data.user.id)
+  }
   if (data.token) {
     setToken(data.token)
   }
@@ -292,7 +327,9 @@ export async function logoutVendedor() {
   }
   clearToken()
   setActiveEmpresaId(null)
+  setActiveUserId(null)
   await clearOfflineDataCache()
+  localStorage.removeItem(ORCAMENTOS_STORAGE_KEY)
   localStorage.removeItem('vendedor_carrinho')
   localStorage.removeItem('vendedor_cliente')
   window.location.reload()
@@ -623,7 +660,14 @@ const ORCAMENTOS_STORAGE_KEY = 'thoth_vendedor_orcamentos_salvos'
 export function getOrcamentosLocais(): OrcamentoSalvo[] {
   try {
     const raw = localStorage.getItem(ORCAMENTOS_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    const parsed: OrcamentoSalvo[] = raw ? JSON.parse(raw) : []
+    const activeUserId = getActiveUserId()
+    const activeEmpresaId = getActiveEmpresaId()
+    return parsed.filter((o) => {
+      if (activeUserId && o.vendedorId && o.vendedorId !== activeUserId) return false
+      if (activeEmpresaId && o.empresaId && o.empresaId !== activeEmpresaId) return false
+      return true
+    })
   } catch {
     return []
   }
@@ -746,6 +790,7 @@ export async function salvarOrcamento(params: {
     pedidoId: serverPedidoId,
     pendingLocalId,
     empresaId,
+    vendedorId: getActiveUserId(),
     cliente: params.cliente,
     tabelaPrecoId: params.tabelaPrecoId,
     formaPagamentoId: params.formaPagamentoId,
@@ -801,6 +846,9 @@ export async function getMe(): Promise<any> {
     const data = await fetchWithAuth('/api/auth/me')
     if (data) {
       await set('offline_me', data)
+      if (data.user?.id) {
+        setActiveUserId(data.user.id)
+      }
       const empresaId = data.empresaAtiva?.empresa_id || data.empresaAtiva?.id
       if (empresaId) {
         setActiveEmpresaId(empresaId)

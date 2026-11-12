@@ -84,6 +84,7 @@ export interface OrcamentoSalvo {
   pedidoId?: string
   pendingLocalId?: string
   empresaId?: string
+  vendedorId?: string
   cliente: Cliente | null
   tabelaPrecoId?: string
   formaPagamentoId?: string
