@@ -296,10 +296,21 @@ export function PedidosView({
     [orcamentosLocais]
   )
 
+  const filteredOrcamentosLocais = useMemo(() => {
+    if (!search.trim()) return orcamentosLocais
+    const term = search.toLowerCase().trim()
+    return orcamentosLocais.filter(
+      (o) =>
+        o.numero?.toLowerCase().includes(term) ||
+        o.cliente?.razao_social?.toLowerCase().includes(term) ||
+        o.cliente?.nome_fantasia?.toLowerCase().includes(term)
+    )
+  }, [orcamentosLocais, search])
+
   const filteredPedidos = useMemo(() => {
     return pedidos.filter((p) => {
-      // Evita duplicidade quando o orçamento já aparece na seção de Orçamentos Salvos
-      if (p.status === 'orcamento' && localServerIds.has(p.id)) {
+      // Evita duplicidade quando o orçamento já aparece na lista de Orçamentos Salvos logo abaixo das abas
+      if ((p.status === 'orcamento' || p.status === 'rascunho') && localServerIds.has(p.id)) {
         return false
       }
       if (!search.trim()) return true
@@ -311,6 +322,16 @@ export function PedidosView({
       )
     })
   }, [pedidos, search, localServerIds])
+
+  const showOrcamentosSection =
+    filteredOrcamentosLocais.length > 0 && (statusFilter === 'todos' || statusFilter === 'orcamentos')
+
+  const totalOrcamentosCount = useMemo(() => {
+    const serverOnlyCount = pedidos.filter(
+      (p) => (p.status === 'orcamento' || p.status === 'rascunho') && !localServerIds.has(p.id)
+    ).length
+    return orcamentosLocais.length + serverOnlyCount
+  }, [orcamentosLocais.length, pedidos, localServerIds])
 
   const getStatusBadge = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -488,8 +509,33 @@ export function PedidosView({
           </div>
         )}
 
+        {/* Filtros de Status */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+          {[
+            { id: 'todos', label: 'Todos' },
+            { id: 'orcamentos', label: `Orçamentos (${totalOrcamentosCount})` },
+            { id: 'pendente', label: 'Pendentes' },
+            { id: 'aprovado', label: 'Aprovados' },
+            { id: 'faturado', label: 'Faturados' },
+            { id: 'cancelado', label: 'Cancelados' },
+          ].map((tab) => (
+            <button
+              type="button"
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all border ${
+                statusFilter === tab.id
+                  ? 'bg-[#00A19C] text-white border-[#00A19C] shadow-2xs'
+                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#00A19C]/40'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Seção: Orçamentos Salvos */}
-        {orcamentosLocais.length > 0 && (statusFilter === 'todos' || statusFilter === 'orcamentos') && (
+        {showOrcamentosSection && (
           <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/60 dark:bg-amber-500/5 p-4 sm:p-5 space-y-3">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-300/60 dark:border-amber-500/30">
@@ -497,7 +543,7 @@ export function PedidosView({
               </div>
               <div>
                 <h3 className="font-display text-sm font-bold text-slate-900 dark:text-white">
-                  Orçamentos Salvos ({orcamentosLocais.length})
+                  Orçamentos Salvos ({filteredOrcamentosLocais.length})
                 </h3>
                 <p className="text-[11px] text-slate-600 dark:text-slate-400">
                   Reabra no carrinho para editar descontos/itens ou transmita direto como pedido
@@ -506,7 +552,7 @@ export function PedidosView({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {orcamentosLocais.map((orc) => (
+              {filteredOrcamentosLocais.map((orc) => (
                 <div
                   key={orc.id}
                   className="rounded-xl border border-amber-200/80 dark:border-amber-500/20 bg-white dark:bg-slate-900 p-3.5 shadow-xs flex flex-col justify-between gap-3"
@@ -633,38 +679,13 @@ export function PedidosView({
           </div>
         )}
 
-        {/* Filtros de Status */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-          {[
-            { id: 'todos', label: 'Todos' },
-            { id: 'orcamentos', label: `Orçamentos (${orcamentosLocais.length})` },
-            { id: 'pendente', label: 'Pendentes' },
-            { id: 'aprovado', label: 'Aprovados' },
-            { id: 'faturado', label: 'Faturados' },
-            { id: 'cancelado', label: 'Cancelados' },
-          ].map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all border ${
-                statusFilter === tab.id
-                  ? 'bg-[#00A19C] text-white border-[#00A19C] shadow-2xs'
-                  : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#00A19C]/40'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         {/* Lista de Pedidos do Servidor */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <Loader2 className="h-8 w-8 animate-spin text-[#00A19C] mb-2" />
             <p className="text-xs">Carregando histórico de pedidos…</p>
           </div>
-        ) : filteredPedidos.length === 0 ? (
+        ) : filteredPedidos.length === 0 && !showOrcamentosSection ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-14 text-center px-4">
             <ClipboardList className="h-10 w-10 text-slate-300 dark:text-slate-700 mb-2" />
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
