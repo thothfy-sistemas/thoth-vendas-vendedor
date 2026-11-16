@@ -526,6 +526,8 @@ export function App() {
     if (orc.cliente && orc.cliente.id) {
       const cliCompleto = clientes.find((c) => c.id === orc.cliente?.id) || orc.cliente
       setSelectedCliente(cliCompleto)
+    } else {
+      setSelectedCliente(null)
     }
     if (orc.tabelaPrecoId) {
       setSelectedTabelaId(orc.tabelaPrecoId)
@@ -980,6 +982,7 @@ export function App() {
         onClearCart={handleClearCart}
         selectedCliente={selectedCliente}
         onOpenClienteSelect={() => setClienteModalOpen(true)}
+        onClearCliente={() => setSelectedCliente(null)}
         onSubmitOrder={handleSubmitOrder}
         onSaveOrcamento={handleSaveOrcamento}
         isSubmitting={isSubmitting}
@@ -998,6 +1001,10 @@ export function App() {
         selectedCliente={selectedCliente}
         onSelect={(c) => {
           setSelectedCliente(c)
+          setClienteModalOpen(false)
+        }}
+        onClear={() => {
+          setSelectedCliente(null)
           setClienteModalOpen(false)
         }}
         onNewClient={() => {
