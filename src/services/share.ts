@@ -32,12 +32,17 @@ export function formatarWhatsApp(
   texto += `\n*ITENS:*\n`
 
   itens.forEach((it, idx) => {
+    const unitNet = it.quantidade > 0 ? it.subtotal / it.quantidade : it.precoUnitarioCobrado
     const unitFmt = fmtBRL(it.precoUnitarioCobrado)
+    const unitNetFmt = fmtBRL(unitNet)
     const subFmt = fmtBRL(it.subtotal)
+    const temDesc = it.descontoPct > 0 || it.subtotal < it.quantidade * it.precoUnitarioCobrado - 0.01
     texto += `${idx + 1}. *[#${it.codigo || '-'}]* ${it.nome}\n`
-    texto += `   ${it.quantidade} ${it.unidade || 'UN'} x ${unitFmt}`
-    if (it.descontoPct > 0) {
-      texto += ` (-${it.descontoPct.toFixed(1)}%)`
+    texto += `   ${it.quantidade} ${it.unidade || 'UN'} x `
+    if (temDesc) {
+      texto += `${unitFmt} (-${it.descontoPct.toFixed(1)}% -> *${unitNetFmt}/un*)`
+    } else {
+      texto += `${unitFmt}`
     }
     texto += ` = *${subFmt}*\n`
   })
@@ -66,8 +71,14 @@ export function formatarWhatsAppPedidoServidor(pedido: Pedido, empresaNome: stri
   if (pedido.itens && pedido.itens.length > 0) {
     texto += `\n*ITENS:*\n`
     pedido.itens.forEach((it, idx) => {
+      const unitNet = it.quantidade > 0 ? it.valor_total / it.quantidade : it.preco_unitario_cobrado
+      const temDesc = (it.desconto_pct || 0) > 0 || it.valor_total < it.quantidade * it.preco_unitario_cobrado - 0.01
       texto += `${idx + 1}. *[#${it.codigo_produto || '-'}]* ${it.nome_produto}\n`
-      texto += `   ${it.quantidade} ${it.unidade || 'UN'} x ${fmtBRL(it.preco_unitario_cobrado)} = *${fmtBRL(it.valor_total)}*\n`
+      if (temDesc) {
+        texto += `   ${it.quantidade} ${it.unidade || 'UN'} x ${fmtBRL(it.preco_unitario_cobrado)} (-${Number(it.desconto_pct || 0).toFixed(1)}% -> *${fmtBRL(unitNet)}/un*) = *${fmtBRL(it.valor_total)}*\n`
+      } else {
+        texto += `   ${it.quantidade} ${it.unidade || 'UN'} x ${fmtBRL(it.preco_unitario_cobrado)} = *${fmtBRL(it.valor_total)}*\n`
+      }
     })
   }
 
@@ -142,21 +153,25 @@ export function gerarPdfPedido(
   doc.setFillColor(241, 245, 249)
   doc.rect(14, y - 4, 182, 8, 'F')
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(8)
+  doc.setFontSize(7.5)
   doc.setTextColor(71, 85, 105)
 
-  doc.text('CÓD', 16, y)
-  doc.text('DESCRIÇÃO DO PRODUTO', 34, y)
-  doc.text('QTD', 120, y)
-  doc.text('UN', 136, y)
-  doc.text('UNIT (R$)', 150, y)
-  doc.text('TOTAL (R$)', 175, y)
+  doc.text('CÓD', 15, y)
+  doc.text('DESCRIÇÃO DO PRODUTO', 31, y)
+  doc.text('QTD', 102, y)
+  doc.text('UN', 114, y)
+  doc.text('UNIT (R$)', 124, y)
+  doc.text('DESC', 144, y)
+  doc.text('C/ DESC', 158, y)
+  doc.text('TOTAL (R$)', 177, y)
 
   // Itens
   y += 6
   doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
   doc.setTextColor(15, 23, 42)
 
+  let brutoTotal = 0
   if (itens.length === 0) {
     doc.setFont('helvetica', 'italic')
     doc.setTextColor(100, 116, 139)
@@ -164,11 +179,26 @@ export function gerarPdfPedido(
     y += 6
   } else {
     itens.forEach((it) => {
-      if (y > 270) {
+      if (y > 265) {
         doc.addPage()
         y = 20
       }
+      const brutoItem = it.quantidade * it.precoUnitarioCobrado
+      brutoTotal += brutoItem
+      const unitNet = it.quantidade > 0 ? it.subtotal / it.quantidade : it.precoUnitarioCobrado
+      const descPct =
+        it.descontoPct > 0
+          ? it.descontoPct
+          : brutoItem > it.subtotal + 0.01
+            ? ((brutoItem - it.subtotal) / brutoItem) * 100
+            : 0
+
       const unitStr = it.precoUnitarioCobrado.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+      const descStr = descPct > 0 ? `${descPct.toFixed(1).replace('.', ',')}%` : '-'
+      const unitNetStr = unitNet.toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })
@@ -177,12 +207,14 @@ export function gerarPdfPedido(
         maximumFractionDigits: 2,
       })
 
-      doc.text((it.codigo || '-').slice(0, 10), 16, y)
-      doc.text(it.nome.slice(0, 44), 34, y)
-      doc.text(String(it.quantidade), 120, y)
-      doc.text(it.unidade || 'UN', 136, y)
-      doc.text(unitStr, 150, y)
-      doc.text(subStr, 175, y)
+      doc.text((it.codigo || '-').slice(0, 9), 15, y)
+      doc.text(it.nome.slice(0, 34), 31, y)
+      doc.text(String(it.quantidade), 102, y)
+      doc.text(it.unidade || 'UN', 114, y)
+      doc.text(unitStr, 124, y)
+      doc.text(descStr, 144, y)
+      doc.text(unitNetStr, 158, y)
+      doc.text(subStr, 177, y)
 
       y += 6
     })
@@ -193,7 +225,19 @@ export function gerarPdfPedido(
   doc.setDrawColor(226, 232, 240)
   doc.line(14, y, 196, y)
 
-  y += 8
+  const descontoTotal = Math.max(0, brutoTotal - total)
+  if (descontoTotal > 0.01) {
+    y += 6
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(100, 116, 139)
+    doc.text(`Subtotal Bruto: ${fmtBRL(brutoTotal)}`, 130, y)
+    y += 5
+    doc.setTextColor(220, 38, 38)
+    doc.text(`Desconto Aplicado: -${fmtBRL(descontoTotal)}`, 130, y)
+  }
+
+  y += 7
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
   doc.setTextColor(0, 161, 156)
